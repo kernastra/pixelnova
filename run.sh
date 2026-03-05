@@ -4,10 +4,12 @@
 
 # Check if virtual environment exists
 if [ ! -d ".venv" ]; then
-    echo "Virtual environment not found. Running setup..."
+    echo "Virtual environment not found. Creating..."
+    python3 -m venv .venv
+    source .venv/bin/activate
     python3 setup.py
+else
+    source .venv/bin/activate
 fi
 
-# Activate virtual environment and run the upscaler
-source .venv/bin/activate
 python upscaler.py "$@"

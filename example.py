@@ -3,12 +3,8 @@
 Example script demonstrating the Photo Upscaler CLI
 """
 
-import os
-import subprocess
-import sys
 from pathlib import Path
 from PIL import Image
-import random
 
 def create_sample_images():
     """Create sample images for testing"""
