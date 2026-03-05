@@ -1,5 +1,7 @@
 # Photo Upscaler CLI
 
+![Photo Upscaler CLI](img.png)
+
 A command-line tool for upscaling photos with an interactive menu, customizable naming, and batch output options.
 
 ## Features
