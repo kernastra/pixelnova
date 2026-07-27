@@ -3,22 +3,29 @@
 Photo Upscaler CLI - A command line tool for upscaling photos
 """
 
-import click
-from PIL import Image
 from pathlib import Path
+
+import click
+from PIL import Image, ImageOps
 
 
 class PhotoUpscaler:
     """Main class for handling photo upscaling operations"""
+
+    supported_formats = {'.jpg', '.jpeg', '.png', '.bmp', '.tif', '.tiff', '.webp'}
+    resampling_methods = {
+        'lanczos': Image.Resampling.LANCZOS,
+        'bicubic': Image.Resampling.BICUBIC,
+        'bilinear': Image.Resampling.BILINEAR,
+    }
     
     def __init__(self, input_folder="input", output_folder="output"):
         self.input_folder = Path(input_folder)
         self.output_folder = Path(output_folder)
-        self.supported_formats = {'.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.webp'}
         
         # Create folders if they don't exist
-        self.input_folder.mkdir(exist_ok=True)
-        self.output_folder.mkdir(exist_ok=True)
+        self.input_folder.mkdir(parents=True, exist_ok=True)
+        self.output_folder.mkdir(parents=True, exist_ok=True)
     
     def get_image_files(self):
         """Get all supported image files from input folder"""
@@ -32,31 +39,42 @@ class PhotoUpscaler:
         """Upscale an image using specified method"""
         try:
             with Image.open(image_path) as img:
-                # Get original dimensions
+                # Apply camera orientation before calculating output dimensions.
+                img = ImageOps.exif_transpose(img)
                 width, height = img.size
                 
-                # Calculate new dimensions
-                new_width = int(width * scale_factor)
-                new_height = int(height * scale_factor)
-                
-                # Choose resampling method
-                if method == 'lanczos':
-                    resampling = Image.LANCZOS
-                elif method == 'bicubic':
-                    resampling = Image.BICUBIC
-                elif method == 'bilinear':
-                    resampling = Image.BILINEAR
-                else:
-                    resampling = Image.LANCZOS
+                # A valid scale factor can still round a tiny image down to zero.
+                new_width = max(1, round(width * scale_factor))
+                new_height = max(1, round(height * scale_factor))
                 
                 # Upscale the image
-                upscaled_img = img.resize((new_width, new_height), resampling)
+                upscaled_img = img.resize(
+                    (new_width, new_height),
+                    self.resampling_methods.get(method, Image.Resampling.LANCZOS),
+                )
                 
                 return upscaled_img
                 
         except Exception as e:
             click.echo(f"Error upscaling {image_path}: {str(e)}", err=True)
             return None
+
+    @staticmethod
+    def validate_custom_name(custom_name):
+        """Validate that a custom base name cannot escape the output folder."""
+        if custom_name is None:
+            return None
+
+        custom_name = custom_name.strip()
+        if (
+            not custom_name
+            or custom_name in {'.', '..'}
+            or '/' in custom_name
+            or '\\' in custom_name
+        ):
+            raise ValueError("custom name must be a filename, not a path")
+
+        return custom_name
     
     def generate_output_filename(self, base_name, extension):
         """Generate output filename with incremental numbering if file exists"""
@@ -71,6 +89,9 @@ class PhotoUpscaler:
     
     def process_images(self, image_files, scale_factor=2, method='lanczos', custom_name=None):
         """Process all images in the input folder"""
+        custom_name = self.validate_custom_name(custom_name)
+        succeeded = 0
+        failed = 0
         click.echo(f"Found {len(image_files)} image(s) to process.")
 
         for i, image_path in enumerate(image_files):
@@ -80,6 +101,7 @@ class PhotoUpscaler:
             upscaled_img = self.upscale_image(image_path, scale_factor, method)
 
             if upscaled_img is None:
+                failed += 1
                 continue
 
             # Determine output filename
@@ -98,18 +120,27 @@ class PhotoUpscaler:
             
             # Save the upscaled image
             try:
-                jpeg_formats = {'.jpg', '.jpeg', '.webp'}
-                if extension.lower() in jpeg_formats:
-                    if upscaled_img.mode in ('RGBA', 'P'):
+                if extension.lower() in {'.jpg', '.jpeg'}:
+                    if upscaled_img.mode not in {'RGB', 'L', 'CMYK'}:
                         upscaled_img = upscaled_img.convert('RGB')
+                    upscaled_img.save(output_path, quality=95)
+                elif extension.lower() == '.webp':
                     upscaled_img.save(output_path, quality=95)
                 else:
                     upscaled_img.save(output_path)
                 click.echo(f"✓ Saved: {output_path.name}")
+                succeeded += 1
             except Exception as e:
                 click.echo(f"✗ Error saving {output_path.name}: {str(e)}", err=True)
+                failed += 1
+            finally:
+                upscaled_img.close()
         
-        click.echo(f"\nProcessing complete! Check the '{self.output_folder}' folder.")
+        click.echo(
+            f"\nProcessing complete: {succeeded} succeeded, {failed} failed. "
+            f"Check the '{self.output_folder}' folder."
+        )
+        return succeeded, failed
 
 
 def run_interactive_menu():
@@ -166,7 +197,11 @@ def run_interactive_menu():
 
         elif choice == 4:
             name = click.prompt("Enter custom base name (or leave blank to clear)", default="", show_default=False)
-            settings['custom_name'] = name.strip() or None
+            try:
+                settings['custom_name'] = PhotoUpscaler.validate_custom_name(name.strip() or None)
+            except ValueError as exc:
+                click.echo(f"Invalid custom name: {exc}", err=True)
+                continue
             click.echo(f"Custom name set to: {settings['custom_name'] or 'none'}")
 
         elif choice == 5:
@@ -207,7 +242,9 @@ def run_interactive_menu():
               help='Prompt for custom filename during execution')
 @click.option('--interactive', '-I', is_flag=True,
               help='Launch interactive menu')
-def main(input_folder, output_folder, scale, method, custom_name, prompt_name, interactive):
+@click.option('--yes', '-y', is_flag=True,
+              help='Skip the confirmation prompt')
+def main(input_folder, output_folder, scale, method, custom_name, prompt_name, interactive, yes):
     """
     Photo Upscaler CLI - Upscale photos from input folder to output folder
 
@@ -230,9 +267,10 @@ def main(input_folder, output_folder, scale, method, custom_name, prompt_name, i
     # Check if input folder has images
     image_files = upscaler.get_image_files()
     if not image_files:
-        click.echo(f"No image files found in '{input_folder}' folder.")
-        click.echo("Please add some images to the input folder and try again.")
-        return
+        raise click.ClickException(
+            f"No image files found in '{input_folder}'. "
+            "Add supported images and try again."
+        )
 
     # Display current settings
     click.echo(f"Input folder: {input_folder}")
@@ -245,20 +283,26 @@ def main(input_folder, output_folder, scale, method, custom_name, prompt_name, i
     if prompt_name:
         custom_name = click.prompt("\nEnter custom base name for output files (or press Enter to use original names)",
                                    default="", show_default=False)
-        if not custom_name.strip():
-            custom_name = None
+        custom_name = custom_name.strip() or None
+
+    try:
+        custom_name = PhotoUpscaler.validate_custom_name(custom_name)
+    except ValueError as exc:
+        raise click.BadParameter(str(exc), param_hint="'--custom-name'") from exc
 
     if custom_name:
         click.echo(f"Using custom base name: {custom_name}")
 
     # Confirm before processing
-    if not click.confirm("\nProceed with upscaling?"):
+    if not yes and not click.confirm("\nProceed with upscaling?"):
         click.echo("Operation cancelled.")
         return
 
     # Process images
     click.echo("\nStarting upscaling process...")
-    upscaler.process_images(image_files, scale, method, custom_name)
+    _, failed = upscaler.process_images(image_files, scale, method, custom_name)
+    if failed:
+        raise click.ClickException(f"{failed} image(s) could not be processed")
 
 
 if __name__ == '__main__':
