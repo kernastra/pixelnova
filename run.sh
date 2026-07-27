@@ -7,7 +7,7 @@ if [ ! -d ".venv" ]; then
     echo "Virtual environment not found. Creating..."
     python3 -m venv .venv
     source .venv/bin/activate
-    python3 setup.py
+    python3 -m pip install -r requirements.txt
 else
     source .venv/bin/activate
 fi

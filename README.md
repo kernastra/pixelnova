@@ -14,19 +14,21 @@ A command-line tool for upscaling photos with an interactive menu, customizable 
 
 ## Requirements
 
-- Python 3.6+
+- Python 3.10+
 - Pillow
 - Click
 
 ## Installation
 
 1. Clone or download this project
-2. Run the setup script:
+2. Create a virtual environment and install the dependencies:
    ```bash
-   python setup.py
+   python3 -m venv .venv
+   source .venv/bin/activate
+   python -m pip install -r requirements.txt
    ```
 
-This will install required dependencies (Pillow, Click) and create `input` and `output` folders.
+The CLI creates the input and output folders when it starts.
 
 Alternatively, use the provided shell script which handles virtual environment creation automatically:
 ```bash
@@ -81,6 +83,7 @@ Menu options:
 | `--method` | `-m` | `lanczos` | Upscaling method: `lanczos`, `bicubic`, `bilinear` |
 | `--custom-name` | `-n` | — | Custom base name for output files |
 | `--prompt-name` | `-p` | off | Prompt for custom filename at runtime |
+| `--yes` | `-y` | off | Skip the confirmation prompt |
 
 ### Examples
 
@@ -99,6 +102,9 @@ python upscaler.py -i /home/user/photos -o /home/user/upscaled -s 3.0
 
 # Prompt for a name at runtime
 python upscaler.py --prompt-name
+
+# Non-interactive run for scripts and automation
+python upscaler.py --yes
 ```
 
 ## Supported Image Formats
@@ -108,7 +114,7 @@ python upscaler.py --prompt-name
 | JPEG | `.jpg`, `.jpeg` |
 | PNG | `.png` |
 | BMP | `.bmp` |
-| TIFF | `.tiff` |
+| TIFF | `.tif`, `.tiff` |
 | WebP | `.webp` |
 
 ## File Naming
@@ -125,10 +131,17 @@ python upscaler.py --prompt-name
 
 | Script | Purpose |
 |---|---|
-| `setup.py` | Installs dependencies and creates `input`/`output` folders |
 | `run.sh` | Creates a virtual environment (if needed), then runs the upscaler |
 | `example.py` | Generates sample test images in the `input` folder |
 | `demo.py` | Runs a full demo with custom naming via subprocess |
+
+## Development
+
+Run the test suite with:
+
+```bash
+python -m unittest discover -v
+```
 
 ## License
 
